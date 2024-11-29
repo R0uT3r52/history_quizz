@@ -37,6 +37,7 @@ export function Chart({ data }: ChartProps) {
     plugins: {
       legend: {
         position: 'bottom',
+        onClick: null,
       },
       tooltip: {
         callbacks: {

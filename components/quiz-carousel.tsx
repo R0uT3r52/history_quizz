@@ -6,7 +6,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-// This would typically come from your API
 const SAMPLE_QUIZZES = [
   {
     id: 1,
@@ -22,7 +21,6 @@ const SAMPLE_QUIZZES = [
     thumbnail: "/react-thumb.jpg",
     userScore: 70,
   },
-  // Add more quizzes as needed
 ];
 
 export function QuizCarousel() {
@@ -36,15 +34,15 @@ export function QuizCarousel() {
 
   return (
     <Carousel className="w-full max-w-5xl mx-auto">
-      <CarouselContent>
+      <CarouselContent className="-ml-2 md:-ml-4">
         {SAMPLE_QUIZZES.map((quiz) => (
-          <CarouselItem key={quiz.id} className="md:basis-1/2 lg:basis-1/3">
+          <CarouselItem key={quiz.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3 flex items-stretch">
             <Card 
-              className="cursor-pointer hover:shadow-lg transition-shadow"
+              className="cursor-pointer hover:shadow-lg transition-shadow flex-1"
               onClick={() => router.push(`/quiz/${quiz.id}`)}
             >
               <CardHeader>
-                <CardTitle className="font-sans">{quiz.title}</CardTitle>
+                <CardTitle>{quiz.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="relative aspect-video w-full">

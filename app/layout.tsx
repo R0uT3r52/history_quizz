@@ -1,4 +1,6 @@
 import { Inter, Roboto } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import "./globals.css";
 
 // Initialize the font
@@ -14,8 +16,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${roboto.variable} font-sans`}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${roboto.variable} font-sans`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ThemeSwitcher />
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
