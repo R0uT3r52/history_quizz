@@ -1,22 +1,36 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Chart } from "./ui/chart";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 
-type Question = {
-  type: string;
+type MultipleChoiceQuestion = {
+  id: number;
+  type: "multiple-choice";
   question: string;
-  options?: string[];
+  options: string[];
+  multiSelect: boolean;
   correctAnswer?: number;
-  correctAnswers?: string[];
-  text?: string;
+  correctAnswers?: number[];
 };
+
+type DragDropQuestion = {
+  id: number;
+  type: "drag-drop";
+  question: string;
+  text: string;
+  options: string[];
+  correctAnswers: string[];
+  blanks: number;
+};
+
+type Question = MultipleChoiceQuestion | DragDropQuestion;
 
 interface QuizResultsProps {
   score: number;
   totalQuestions: number;
   answers: boolean[];
   questions: Question[];
-  userAnswers: (number | string[])[];
+  userAnswers: (number | number[] | string[])[];
 }
 
 export function QuizResults({ 
@@ -26,25 +40,39 @@ export function QuizResults({
   questions,
   userAnswers 
 }: QuizResultsProps) {
-  const actualTotalQuestions = questions.reduce((total, question) => {
-    if (question.type === "drag-drop") {
+  const totalPossiblePoints = questions.reduce((total, question) => {
+    if (question.type === "multiple-choice" && question.multiSelect) {
       return total + question.correctAnswers!.length;
+    } else if (question.type === "drag-drop") {
+      return total + question.correctAnswers.length;
     }
     return total + 1;
   }, 0);
 
-  const correctAnswersCount = questions.reduce((total, question, qIndex) => {
-    if (question.type === "drag-drop") {
+  const earnedPoints = questions.reduce((total, question, qIndex) => {
+    if (question.type === "multiple-choice") {
+      if (question.multiSelect) {
+        const userAnswerArray = userAnswers[qIndex] as number[];
+        const correctSelections = userAnswerArray.filter(answer => 
+          question.correctAnswers!.includes(answer)
+        ).length;
+        const incorrectSelections = userAnswerArray.filter(answer => 
+          !question.correctAnswers!.includes(answer)
+        ).length;
+        return total + Math.max(0, correctSelections - incorrectSelections);
+      } else {
+        return total + (answers[qIndex] ? 1 : 0);
+      }
+    } else if (question.type === "drag-drop") {
       const dragDropAnswers = userAnswers[qIndex] as string[];
       return total + dragDropAnswers.filter(
-        (answer, i) => answer === question.correctAnswers![i]
+        (answer, i) => answer === question.correctAnswers[i]
       ).length;
     }
-    return total + (answers[qIndex] ? 1 : 0);
+    return total;
   }, 0);
 
-  const percentage = Math.round((correctAnswersCount / actualTotalQuestions) * 100);
-  const wrongAnswersCount = actualTotalQuestions - correctAnswersCount;
+  const percentage = Math.round((earnedPoints / totalPossiblePoints) * 100);
 
   const getScoreColor = (percentage: number) => {
     if (percentage >= 70) return "text-green-500";
@@ -56,7 +84,7 @@ export function QuizResults({
     labels: ['Correct', 'Wrong'],
     datasets: [
       {
-        data: [correctAnswersCount, wrongAnswersCount],
+        data: [earnedPoints, totalPossiblePoints - earnedPoints],
         backgroundColor: ['#4ade80', '#f87171'],
       },
     ],
@@ -70,7 +98,7 @@ export function QuizResults({
         <p className={cn("text-2xl font-bold", getScoreColor(percentage))}>
           Your score: {percentage}%
         </p>
-        <p>({correctAnswersCount} out of {actualTotalQuestions} answers correct)</p>
+        <p>({earnedPoints} out of {totalPossiblePoints} points)</p>
       </div>
 
       <div className="w-64 h-64 mx-auto mb-12">
@@ -83,12 +111,13 @@ export function QuizResults({
             <h3 className="font-bold mb-4">
               {qIndex + 1}. {question.question}
             </h3>
-            {question.type === "multiple-choice" ? (
+            {question.type === "multiple-choice" && (
               <div className="space-y-2">
-                {question.options!.map((option, oIndex) => {
-                  const isSelected = question.multiSelect 
-                    ? (userAnswers[qIndex] as number[]).includes(oIndex)
-                    : userAnswers[qIndex] === oIndex;
+                {question.options.map((option, oIndex) => {
+                  const userAnswer = userAnswers[qIndex];
+                  const isSelected = Array.isArray(userAnswer)
+                    ? (userAnswer as number[]).includes(oIndex)
+                    : userAnswer === oIndex;
                   
                   const isCorrect = question.multiSelect
                     ? question.correctAnswers?.includes(oIndex)
@@ -105,74 +134,27 @@ export function QuizResults({
                       )}
                     >
                       {option}
-                      {isCorrect && !isSelected}
-                      {!isCorrect && isSelected}
                     </div>
                   );
                 })}
               </div>
-            ) : question.type === "multiple-select" ? (
-              <div className="space-y-2">
-                {question.options!.map((option, oIndex) => {
-                  const userAnswerArray = userAnswers[qIndex] as string[];
-                  const isSelected = userAnswerArray.includes(option);
-                  const isCorrect = question.correctAnswers!.includes(option);
-                  
-                  return (
-                    <div
-                      key={oIndex}
-                      className={cn(
-                        "p-3 rounded-md",
-                        isCorrect && isSelected && "bg-green-100 text-green-700",
-                        isCorrect && !isSelected && "bg-yellow-100 text-yellow-700",
-                        !isCorrect && isSelected && "bg-red-100 text-red-700"
-                      )}
-                    >
-                      {option}
-                      {isCorrect && !isSelected && " (Missed correct answer)"}
-                      {!isCorrect && isSelected && " (Incorrect selection)"}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : question.type === "drag-drop" ? (
+            )}
+            {question.type === "drag-drop" && (
               <div className="text-lg flex flex-wrap items-center gap-2">
-                {question.text!.split("[BLANK]").map((part, index, array) => (
+                {question.text.split("[BLANK]").map((part, index, array) => (
                   <span key={index} className="inline-flex items-center gap-2">
                     {part}
                     {index < array.length - 1 && (
                       <span className={cn(
                         "px-4 py-1 rounded font-bold inline-block my-1",
                         (userAnswers[qIndex] as string[])[index] 
-                          ? ((userAnswers[qIndex] as string[])[index] === question.correctAnswers![index]
+                          ? ((userAnswers[qIndex] as string[])[index] === question.correctAnswers[index]
                             ? "bg-green-100 text-green-500"
                             : "bg-red-100 text-red-500")
                           : "bg-gray-100 text-gray-500"
                       )}>
                         {(userAnswers[qIndex] as string[])[index] || 
-                          `[${question.correctAnswers![index]}]`}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="text-lg flex flex-wrap items-center gap-2">
-                {question.text!.split("[BLANK]").map((part, index, array) => (
-                  <span key={index} className="inline-flex items-center gap-2">
-                    {part}
-                    {index < array.length - 1 && (
-                      <span className={cn(
-                        "px-4 py-1 rounded font-bold inline-block my-1",
-                        (userAnswers[qIndex] as string[])[index] 
-                          ? ((userAnswers[qIndex] as string[])[index] === question.correctAnswers![index]
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700")
-                          : "bg-gray-100 text-gray-700"
-                      )}>
-                        {(userAnswers[qIndex] as string[])[index] || ""}
-                        {!(userAnswers[qIndex] as string[])[index] && 
-                          ` [${question.correctAnswers![index]}]`}
+                          `[${question.correctAnswers[index]}]`}
                       </span>
                     )}
                   </span>

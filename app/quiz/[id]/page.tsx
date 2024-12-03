@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -34,7 +35,7 @@ const SAMPLE_QUIZ = {
   questions: [
     {
       id: 1,
-      type: "multiple-choice",
+      type: "multiple-choice" as const,
       question: "What is JavaScript?",
       options: [
         "A programming language",
@@ -47,7 +48,7 @@ const SAMPLE_QUIZ = {
     },
     {
       id: 2,
-      type: "multiple-choice",
+      type: "multiple-choice" as const,
       question: "Which of these are JavaScript frameworks/libraries?",
       options: [
         "React",
@@ -60,7 +61,7 @@ const SAMPLE_QUIZ = {
     },
     {
       id: 3,
-      type: "drag-drop",
+      type: "drag-drop" as const,
       question: "Complete the sentence",
       text: "React is a [BLANK] library for building [BLANK] interfaces.",
       options: ["JavaScript", "user"],
@@ -114,28 +115,34 @@ export default function QuizPage({ params }: { params: { id: string } }) {
     const question = SAMPLE_QUIZ.questions[currentQuestion];
     let isCorrect = false;
     let currentAnswers: number | number[] | string[] = [];
+    let pointsEarned = 0;
 
     if (question.type === "multiple-choice") {
       if (question.multiSelect) {
-        isCorrect = question.correctAnswers!.length === selectedAnswers.length &&
-                   question.correctAnswers!.every(answer => selectedAnswers.includes(answer));
+        pointsEarned = selectedAnswers.reduce((points, answer) => {
+          return points + (question.correctAnswers!.includes(answer) ? 1 : 0);
+        }, 0);
+        pointsEarned -= selectedAnswers.filter(answer => 
+          !question.correctAnswers!.includes(answer)
+        ).length;
+        pointsEarned = Math.max(0, pointsEarned);
+        
+        isCorrect = pointsEarned > 0;
         currentAnswers = selectedAnswers;
       } else {
         isCorrect = selectedAnswer === question.correctAnswer;
+        pointsEarned = isCorrect ? 1 : 0;
         currentAnswers = selectedAnswer ?? -1;
       }
     } else if (question.type === "drag-drop") {
       currentAnswers = dragDropAnswers;
       
-      const correctCount = dragDropAnswers.reduce((count, answer, index) => {
-        if (!answer) return count;
-        return count + (answer === question.correctAnswers![index] ? 1 : 0);
+      pointsEarned = dragDropAnswers.reduce((points, answer, index) => {
+        if (!answer) return points;
+        return points + (answer === question.correctAnswers![index] ? 1 : 0);
       }, 0);
       
-      if (correctCount > 0) {
-        isCorrect = true;
-        setScore(score + (correctCount / question.blanks!));
-      }
+      isCorrect = pointsEarned > 0;
     }
 
     setAnswers([...answers, isCorrect]);
@@ -147,9 +154,9 @@ export default function QuizPage({ params }: { params: { id: string } }) {
       setSelectedAnswers([]);
       setDragDropAnswers([]);
       setTimeLeft(QUESTION_TIME);
-      if (isCorrect) setScore(score + 1);
+      setScore(score + pointsEarned);
     } else {
-      if (isCorrect) setScore(score + 1);
+      setScore(score + pointsEarned);
       setIsFinished(true);
     }
   };
