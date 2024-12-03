@@ -5,6 +5,29 @@ import { Button } from "@/components/ui/button";
 import { QuizResults } from "@/components/quiz-results";
 import { CircleTimer } from "@/components/circle-timer";
 import { DragDropQuestion } from "@/components/drag-drop-question";
+import { Checkbox } from "@/components/ui/checkbox";
+
+type MultipleChoiceQuestion = {
+  id: number;
+  type: "multiple-choice";
+  question: string;
+  options: string[];
+  multiSelect: boolean;
+  correctAnswer?: number;
+  correctAnswers?: number[];
+};
+
+type DragDropQuestion = {
+  id: number;
+  type: "drag-drop";
+  question: string;
+  text: string;
+  options: string[];
+  correctAnswers: string[];
+  blanks: number;
+};
+
+type Question = MultipleChoiceQuestion | DragDropQuestion;
 
 // This would typically come from your API
 const SAMPLE_QUIZ = {
@@ -20,9 +43,23 @@ const SAMPLE_QUIZ = {
         "A database",
       ],
       correctAnswer: 0,
+      multiSelect: false,
     },
     {
       id: 2,
+      type: "multiple-choice",
+      question: "Which of these are JavaScript frameworks/libraries?",
+      options: [
+        "React",
+        "Angular",
+        "Vue",
+        "Python"
+      ],
+      correctAnswers: [0, 1, 2],
+      multiSelect: true,
+    },
+    {
+      id: 3,
       type: "drag-drop",
       question: "Complete the sentence",
       text: "React is a [BLANK] library for building [BLANK] interfaces.",
@@ -43,7 +80,8 @@ export default function QuizPage({ params }: { params: { id: string } }) {
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
   const [isFinished, setIsFinished] = useState(false);
   const [answers, setAnswers] = useState<boolean[]>([]);
-  const [userAnswers, setUserAnswers] = useState<(number | string[])[]>([]);
+  const [userAnswers, setUserAnswers] = useState<(number | number[] | string[])[]>([]);
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
 
   useEffect(() => {
     if (timeLeft > 0 && !isFinished) {
@@ -55,7 +93,17 @@ export default function QuizPage({ params }: { params: { id: string } }) {
   }, [timeLeft, isFinished]);
 
   const handleAnswerSelect = (index: number) => {
-    setSelectedAnswer(index);
+    const question = SAMPLE_QUIZ.questions[currentQuestion];
+    if (question.multiSelect) {
+      setSelectedAnswers(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        }
+        return [...prev, index];
+      });
+    } else {
+      setSelectedAnswer(index);
+    }
   };
 
   const handleDragDropComplete = (answers: string[]) => {
@@ -65,24 +113,29 @@ export default function QuizPage({ params }: { params: { id: string } }) {
   const handleNextQuestion = () => {
     const question = SAMPLE_QUIZ.questions[currentQuestion];
     let isCorrect = false;
-    let currentAnswers: number | string[] = [];
+    let currentAnswers: number | number[] | string[] = [];
 
     if (question.type === "multiple-choice") {
-      if (selectedAnswer === null) {
-        isCorrect = false;
-        currentAnswers = -1;
+      if (question.multiSelect) {
+        isCorrect = question.correctAnswers!.length === selectedAnswers.length &&
+                   question.correctAnswers!.every(answer => selectedAnswers.includes(answer));
+        currentAnswers = selectedAnswers;
       } else {
         isCorrect = selectedAnswer === question.correctAnswer;
-        currentAnswers = selectedAnswer;
+        currentAnswers = selectedAnswer ?? -1;
       }
     } else if (question.type === "drag-drop") {
-      currentAnswers = Array(question.blanks).fill("").map((_, index) => 
-        dragDropAnswers[index] || ""
-      );
+      currentAnswers = dragDropAnswers;
       
-      isCorrect = currentAnswers.every((answer, index) => 
-        answer === question.correctAnswers![index]
-      );
+      const correctCount = dragDropAnswers.reduce((count, answer, index) => {
+        if (!answer) return count;
+        return count + (answer === question.correctAnswers![index] ? 1 : 0);
+      }, 0);
+      
+      if (correctCount > 0) {
+        isCorrect = true;
+        setScore(score + (correctCount / question.blanks!));
+      }
     }
 
     setAnswers([...answers, isCorrect]);
@@ -91,6 +144,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
     if (currentQuestion < SAMPLE_QUIZ.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer(null);
+      setSelectedAnswers([]);
       setDragDropAnswers([]);
       setTimeLeft(QUESTION_TIME);
       if (isCorrect) setScore(score + 1);
@@ -135,25 +189,40 @@ export default function QuizPage({ params }: { params: { id: string } }) {
         {question.type === "multiple-choice" ? (
           <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
             {question.options.map((option, index) => (
-              <Button
-                key={index}
-                variant={selectedAnswer === index ? "default" : "outline"}
-                className="w-full text-center justify-center h-auto p-4"
-                onClick={() => handleAnswerSelect(index)}
-              >
-                {option}
-              </Button>
+              question.multiSelect ? (
+                <label
+                  key={index}
+                  className="flex items-center gap-3 w-full p-4 border rounded-md cursor-pointer"
+                >
+                  <Checkbox
+                    checked={selectedAnswers.includes(index)}
+                    onCheckedChange={() => handleAnswerSelect(index)}
+                  />
+                  <span>{option}</span>
+                </label>
+              ) : (
+                <Button
+                  key={index}
+                  variant={selectedAnswer === index ? "default" : "outline"}
+                  className="w-full text-center justify-center h-auto p-4"
+                  onClick={() => handleAnswerSelect(index)}
+                >
+                  {option}
+                </Button>
+              )
             ))}
           </div>
         ) : (
           <DragDropQuestion
-            text={question.text}
-            options={question.options}
+            text={question.text!}
+            options={question.options!}
             onComplete={handleDragDropComplete}
           />
         )}
 
-        {((question.type === "multiple-choice" && selectedAnswer !== null) || 
+        {((question.type === "multiple-choice" && 
+           ((question.multiSelect && selectedAnswers.length > 0) || 
+            (!question.multiSelect && selectedAnswer !== null))) || 
           (question.type === "drag-drop" && isAllBlanksFilled())) && (
           <div className="flex justify-center">
             <Button 

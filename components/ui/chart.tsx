@@ -37,7 +37,7 @@ export function Chart({ data }: ChartProps) {
     plugins: {
       legend: {
         position: 'bottom',
-        onClick: null,
+        onClick: () => {}, // Changed null to empty function to fix type error
       },
       tooltip: {
         callbacks: {

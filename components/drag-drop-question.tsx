@@ -28,17 +28,9 @@ export function DragDropQuestion({ text, options, onComplete }: DragDropQuestion
       const newAnswers = [...answers];
       newAnswers[index] = draggingOption;
       setAnswers(newAnswers);
-      if (newAnswers.every(answer => answer !== "")) {
-        onComplete(newAnswers);
-      }
+      onComplete(newAnswers);
     }
   };
-
-  useEffect(() => {
-    if (answers.some(answer => answer === "")) {
-      onComplete([]);
-    }
-  }, [answers, onComplete]);
 
   const textParts = text.split("[BLANK]");
 
