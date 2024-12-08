@@ -40,39 +40,34 @@ export function QuizResults({
   questions,
   userAnswers 
 }: QuizResultsProps) {
-  const totalPossiblePoints = questions.reduce((total, question) => {
-    if (question.type === "multiple-choice" && question.multiSelect) {
-      return total + question.correctAnswers!.length;
-    } else if (question.type === "drag-drop") {
-      return total + question.correctAnswers.length;
+  const totalPossible = questions.reduce((total, q) => {
+    if (q.type === "multiple-choice" && q.multiSelect) {
+      return total + (q.correctAnswers?.length || 0);
+    }
+    if (q.type === "drag-drop") {
+      return total + q.correctAnswers.length;
     }
     return total + 1;
   }, 0);
 
-  const earnedPoints = questions.reduce((total, question, qIndex) => {
-    if (question.type === "multiple-choice") {
-      if (question.multiSelect) {
-        const userAnswerArray = userAnswers[qIndex] as number[];
-        const correctSelections = userAnswerArray.filter(answer => 
-          question.correctAnswers!.includes(answer)
-        ).length;
-        const incorrectSelections = userAnswerArray.filter(answer => 
-          !question.correctAnswers!.includes(answer)
-        ).length;
-        return total + Math.max(0, correctSelections - incorrectSelections);
-      } else {
-        return total + (answers[qIndex] ? 1 : 0);
+  const earnedPoints = questions.reduce((total, q, qIndex) => {
+    if (q.type === "multiple-choice") {
+      if (q.multiSelect) {
+        const userAns = userAnswers[qIndex] as number[];
+        const correct = userAns.filter(a => q.correctAnswers?.includes(a)).length;
+        const incorrect = userAns.filter(a => !q.correctAnswers?.includes(a)).length;
+        return total + Math.max(0, correct - incorrect);
       }
-    } else if (question.type === "drag-drop") {
-      const dragDropAnswers = userAnswers[qIndex] as string[];
-      return total + dragDropAnswers.filter(
-        (answer, i) => answer === question.correctAnswers[i]
-      ).length;
+      return total + (answers[qIndex] ? 1 : 0);
+    }
+    if (q.type === "drag-drop") {
+      const dragAns = userAnswers[qIndex] as string[];
+      return total + dragAns.filter((a, i) => a === q.correctAnswers[i]).length;
     }
     return total;
   }, 0);
 
-  const percentage = Math.round((earnedPoints / totalPossiblePoints) * 100);
+  const percentage = Math.min(100, Math.round((earnedPoints / totalPossible) * 100));
 
   const getScoreColor = (percentage: number) => {
     if (percentage >= 70) return "text-green-500";
@@ -84,7 +79,7 @@ export function QuizResults({
     labels: ['Correct', 'Wrong'],
     datasets: [
       {
-        data: [earnedPoints, totalPossiblePoints - earnedPoints],
+        data: [earnedPoints, totalPossible - earnedPoints],
         backgroundColor: ['#4ade80', '#f87171'],
       },
     ],
@@ -98,7 +93,7 @@ export function QuizResults({
         <p className={cn("text-2xl font-bold", getScoreColor(percentage))}>
           Your score: {percentage}%
         </p>
-        <p>({earnedPoints} out of {totalPossiblePoints} points)</p>
+        <p>({earnedPoints} out of {totalPossible} points)</p>
       </div>
 
       <div className="w-64 h-64 mx-auto mb-12">

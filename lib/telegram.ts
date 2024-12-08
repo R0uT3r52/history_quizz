@@ -1,16 +1,16 @@
 import { createHash } from 'crypto';
 
 export function validateTelegramWebAppData(initData: string, botToken: string) {
-  // Parse the init data
+  // Parse init data
   const urlParams = new URLSearchParams(initData);
   const hash = urlParams.get('hash');
   urlParams.delete('hash');
 
-  // Sort params alphabetically
+  // Sort params as alphabet
   const sortedParams = Array.from(urlParams.entries())
     .sort(([a], [b]) => a.localeCompare(b));
   
-  // Create data check string
+  
   const dataCheckString = sortedParams
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');

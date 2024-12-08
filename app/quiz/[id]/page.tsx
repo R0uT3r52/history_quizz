@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,6 +8,10 @@ import { QuizResults } from "@/components/quiz-results";
 import { CircleTimer } from "@/components/circle-timer";
 import { DragDropQuestion } from "@/components/drag-drop-question";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getQuizById, submitQuizResult, type QuizDetails } from "@/lib/api";
+import { getTelegramUser } from "@/lib/telegram-user";
+
+const QUESTION_TIME = 30; // Time in seconds for each question
 
 type MultipleChoiceQuestion = {
   id: number;
@@ -28,50 +33,7 @@ type DragDropQuestion = {
   blanks: number;
 };
 
-type Question = MultipleChoiceQuestion | DragDropQuestion;
-
-// This would typically come from your API
-const SAMPLE_QUIZ = {
-  questions: [
-    {
-      id: 1,
-      type: "multiple-choice" as const,
-      question: "What is JavaScript?",
-      options: [
-        "A programming language",
-        "A markup language",
-        "A styling language",
-        "A database",
-      ],
-      correctAnswer: 0,
-      multiSelect: false,
-    },
-    {
-      id: 2,
-      type: "multiple-choice" as const,
-      question: "Which of these are JavaScript frameworks/libraries?",
-      options: [
-        "React",
-        "Angular",
-        "Vue",
-        "Python"
-      ],
-      correctAnswers: [0, 1, 2],
-      multiSelect: true,
-    },
-    {
-      id: 3,
-      type: "drag-drop" as const,
-      question: "Complete the sentence",
-      text: "React is a [BLANK] library for building [BLANK] interfaces.",
-      options: ["JavaScript", "user"],
-      correctAnswers: ["JavaScript", "user"],
-      blanks: 2
-    }
-  ],
-};
-
-const QUESTION_TIME = 5; //20
+export type Question = MultipleChoiceQuestion | DragDropQuestion;
 
 export default function QuizPage({ params }: { params: { id: string } }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -83,6 +45,23 @@ export default function QuizPage({ params }: { params: { id: string } }) {
   const [answers, setAnswers] = useState<boolean[]>([]);
   const [userAnswers, setUserAnswers] = useState<(number | number[] | string[])[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [quiz, setQuiz] = useState<QuizDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchQuiz = async () => {
+      try {
+        const data = await getQuizById(parseInt(params.id));
+        setQuiz(data);
+      } catch (error) {
+        console.error('Failed to fetch quiz:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuiz();
+  }, [params.id]);
 
   useEffect(() => {
     if (timeLeft > 0 && !isFinished) {
@@ -94,8 +73,8 @@ export default function QuizPage({ params }: { params: { id: string } }) {
   }, [timeLeft, isFinished]);
 
   const handleAnswerSelect = (index: number) => {
-    const question = SAMPLE_QUIZ.questions[currentQuestion];
-    if (question.multiSelect) {
+    const question = quiz?.questions[currentQuestion];
+    if (question?.type === "multiple-choice" && question.multiSelect) {
       setSelectedAnswers(prev => {
         if (prev.includes(index)) {
           return prev.filter(i => i !== index);
@@ -111,13 +90,13 @@ export default function QuizPage({ params }: { params: { id: string } }) {
     setDragDropAnswers(answers);
   };
 
-  const handleNextQuestion = () => {
-    const question = SAMPLE_QUIZ.questions[currentQuestion];
+  const handleNextQuestion = async () => {
+    const question = quiz?.questions[currentQuestion];
     let isCorrect = false;
     let currentAnswers: number | number[] | string[] = [];
     let pointsEarned = 0;
 
-    if (question.type === "multiple-choice") {
+    if (question?.type === "multiple-choice") {
       if (question.multiSelect) {
         pointsEarned = selectedAnswers.reduce((points, answer) => {
           return points + (question.correctAnswers!.includes(answer) ? 1 : 0);
@@ -134,7 +113,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
         pointsEarned = isCorrect ? 1 : 0;
         currentAnswers = selectedAnswer ?? -1;
       }
-    } else if (question.type === "drag-drop") {
+    } else if (question?.type === "drag-drop") {
       currentAnswers = dragDropAnswers;
       
       pointsEarned = dragDropAnswers.reduce((points, answer, index) => {
@@ -148,7 +127,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
     setAnswers([...answers, isCorrect]);
     setUserAnswers([...userAnswers, currentAnswers]);
     
-    if (currentQuestion < SAMPLE_QUIZ.questions.length - 1) {
+    if (currentQuestion < (quiz?.questions.length ?? 0) - 1) {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer(null);
       setSelectedAnswers([]);
@@ -156,38 +135,66 @@ export default function QuizPage({ params }: { params: { id: string } }) {
       setTimeLeft(QUESTION_TIME);
       setScore(score + pointsEarned);
     } else {
-      setScore(score + pointsEarned);
+      const finalScore = score + pointsEarned;
+      const totalPossible = quiz!.questions.reduce((total, q) => {
+        if (q.type === "multiple-choice" && q.multiSelect) {
+          return total + (q.correctAnswers?.length || 0);
+        }
+        if (q.type === "drag-drop") {
+          return total + q.correctAnswers.length;
+        }
+        return total + 1;
+      }, 0);
+
+      const percentageScore = Math.min(100, Math.round((finalScore / totalPossible) * 100));
+
+      try {
+        const user = getTelegramUser();
+        const userId = user?.id ?? 0;
+        await submitQuizResult({
+          user_id: userId,
+          quiz_id: parseInt(params.id),
+          score: percentageScore,
+          answers: userAnswers,
+        });
+      } catch (error) {
+        console.error('Failed to submit quiz results:', error);
+      }
       setIsFinished(true);
     }
   };
 
   const isAllBlanksFilled = () => {
-    if (question.type === "drag-drop") {
+    if (question?.type === "drag-drop") {
       return dragDropAnswers.length === question.blanks && 
              dragDropAnswers.every(answer => answer !== undefined && answer !== "");
     }
     return true;
   };
 
+  if (loading || !quiz) {
+    return <div>Loading quiz...</div>;
+  }
+
+  const question = quiz.questions[currentQuestion];
+
   if (isFinished) {
     return (
       <QuizResults 
         score={score} 
-        totalQuestions={SAMPLE_QUIZ.questions.length} 
+        totalQuestions={quiz.questions.length} 
         answers={answers}
-        questions={SAMPLE_QUIZ.questions}
+        questions={quiz.questions}
         userAnswers={userAnswers}
       />
     );
   }
 
-  const question = SAMPLE_QUIZ.questions[currentQuestion];
-
   return (
     <div className="container mx-auto p-4 max-w-2xl">
       <div className="flex flex-col items-center gap-4 mb-8">
         <CircleTimer timeLeft={timeLeft} totalTime={QUESTION_TIME} />
-        <div>Question {currentQuestion + 1}/{SAMPLE_QUIZ.questions.length}</div>
+        <div>Question {currentQuestion + 1}/{quiz.questions.length}</div>
       </div>
 
       <div className="space-y-8">
@@ -195,7 +202,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
         
         {question.type === "multiple-choice" ? (
           <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
-            {question.options.map((option, index) => (
+            {question.options.map((option: string, index: number) => (
               question.multiSelect ? (
                 <label
                   key={index}
@@ -236,7 +243,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
               className="w-full max-w-md"
               onClick={handleNextQuestion}
             >
-              {currentQuestion === SAMPLE_QUIZ.questions.length - 1 ? "Finish Quiz" : "Next Question"}
+              {currentQuestion === quiz.questions.length - 1 ? "Finish Quiz" : "Next Question"}
             </Button>
           </div>
         )}

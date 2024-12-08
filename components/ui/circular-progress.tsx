@@ -1,5 +1,5 @@
 interface CircularProgressProps {
-  value: number;
+  value: number | null;
   size?: number;
   strokeWidth?: number;
   className?: string;
@@ -13,9 +13,10 @@ export function CircularProgress({
 }: CircularProgressProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (value / 100) * circumference;
+  const offset = value !== null ? circumference - (value / 100) * circumference : circumference;
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return "text-gray-300";
     if (score >= 80) return "text-green-500";
     if (score >= 60) return "text-yellow-500";
     if (score >= 40) return "text-orange-500";
@@ -40,22 +41,24 @@ export function CircularProgress({
           cy={size / 2}
         />
         {/* Progress circle */}
-        <circle
-          className={`${getScoreColor(value)} transition-all duration-300 ease-in-out`}
-          stroke="currentColor"
-          fill="transparent"
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          r={radius}
-          cx={size / 2}
-          cy={size / 2}
-        />
+        {value !== null && (
+          <circle
+            className={`${getScoreColor(value)} transition-all duration-300 ease-in-out`}
+            stroke="currentColor"
+            fill="transparent"
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            r={radius}
+            cx={size / 2}
+            cy={size / 2}
+          />
+        )}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={`${getScoreColor(value)} text-2xl font-bold`}>
-          {value}%
+          {value !== null ? `${value}%` : "-"}
         </span>
       </div>
     </div>
